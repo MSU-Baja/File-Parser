@@ -3,7 +3,7 @@ import random
 import numpy as np
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QScrollArea, QCheckBox, QMainWindow, QFrame
+    QScrollArea, QCheckBox, QMainWindow, QFrame, QSlider
 )
 from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -23,6 +23,7 @@ class GraphUpdateThread(QThread):
         self.pause_flag = False
         self.headers = []
         self.data = self.load_data()  # Load all data into memory
+        self.current_index = 0
 
     def load_data(self):
         """Reads the text file and parses it into graph data."""
@@ -69,8 +70,8 @@ class GraphUpdateThread(QThread):
 
             self.msleep(500)  # Update every 500ms
             for i in range(10):
-                self.update_signal.emit(i, self.data[i][:index])  # Send slice of real data
-            index += 1
+                self.update_signal.emit(i, self.data[i][:self.current_index])  # Send slice of real data
+            self.current_index += 1
 
 
 
@@ -88,14 +89,17 @@ class VideoGraphApp(QMainWindow):
         self.player.setAudioOutput(self.audio_output)
         self.player.setVideoOutput(self.video_widget)
 
-        self.video_path = "C:/Users/evang/Baja/5-8 run 2.MP4"      #       CHANGE VIDEO        #
-        self.data_file_path = "C:/Users/evang/File-Parser/5-8-2024_Runs/Data/5-8 Run 2.TXT"         #       CHANGE DATA         #
+        self.video_path = "C:/Users/matth/File-Parser/5-8-2024_Runs/Video/Run2.MP4"      #       CHANGE VIDEO        #
+        self.data_file_path = "C:/Users/matth/File-Parser/5-8-2024_Runs/Data/5-8 Run 2.TXT"         #       CHANGE DATA         #
 
         self.player.setSource(QUrl.fromLocalFile(self.video_path))
 
         # Play/Pause Button
         self.play_button = QPushButton("Play / Pause")
         self.play_button.clicked.connect(self.toggle_video)
+
+        # Time Slider
+
 
         # Layout
         main_layout = QHBoxLayout()
@@ -111,7 +115,11 @@ class VideoGraphApp(QMainWindow):
         self.graph_checkboxes = []
         self.graph_frames = []
         self.graph_widgets = []
-        self.graph_titles = ["Graph " + str(i+1) for i in range(10)]  # Default titles
+        self.graph_titles = ["Longitudinal Force", "Lateral Force",
+                             "Vertical Force", "Camber Moment",
+                             "Wheel Torque", "Steer Torque",
+                             "RPM", "Degrees",
+                             "Longitudinal Acceleration", "Vertical Acceleration"]  # Data Titles
 
         for i in range(10):
             checkbox = QCheckBox(self.graph_titles[i])  # Default labels before headers load
