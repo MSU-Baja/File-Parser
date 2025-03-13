@@ -9,6 +9,8 @@ from PyQt6.QtMultimediaWidgets import QVideoWidget
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtCore import QUrl, QThread, pyqtSignal, Qt
 import pyqtgraph as pg
+from PyQt6.QtGui import QFont
+
 
 
 # Simulated background thread to update graphs
@@ -68,7 +70,7 @@ class GraphUpdateThread(QThread):
             if self.pause_flag:
                 return  # Stop immediately when video pauses
 
-            self.msleep(500)  # Update every 500ms
+            self.msleep(100)  # Update every 500ms
             for i in range(10):
                 self.update_signal.emit(i, self.data[i][:self.current_index])  # Send slice of real data
             self.current_index += 1
@@ -88,6 +90,7 @@ class VideoGraphApp(QMainWindow):
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
         self.player.setVideoOutput(self.video_widget)
+        self.player.positionChanged.connect(self.update_timer)
 
         self.video_path = "C:/Users/matth/File-Parser/5-8-2024_Runs/Video/Run2.MP4"      #       CHANGE VIDEO        #
         self.data_file_path = "C:/Users/matth/File-Parser/5-8-2024_Runs/Data/5-8 Run 2.TXT"         #       CHANGE DATA         #
@@ -98,8 +101,15 @@ class VideoGraphApp(QMainWindow):
         self.play_button = QPushButton("Play / Pause")
         self.play_button.clicked.connect(self.toggle_video)
 
-        # Time Slider
+        # Timer Setup
+        # Set up the timer as an overlay on the video
+        self.timer_label = QLabel("00:00", self)
+        self.timer_label.setStyleSheet("color: white; background-color: rgba(0, 0, 0, 128); padding: 5px;")
+        self.timer_label.setFont(QFont("Arial", 16))
+        self.timer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # Place the timer label on top of the video (adjust position as needed)
+        self.timer_label.setGeometry(10, 10, 100, 30)  # x, y, width, height
 
         # Layout
         main_layout = QHBoxLayout()
@@ -107,6 +117,11 @@ class VideoGraphApp(QMainWindow):
         video_controls.addWidget(self.video_widget)
         video_controls.addWidget(self.play_button)
         main_layout.addLayout(video_controls, 2)
+        video_layout = QVBoxLayout()
+        video_layout.addWidget(self.timer_label)  # Add the timer to the video layout
+        video_controls.addLayout(video_layout)
+
+
 
         # Right panel (Graph Controls & Graphs)
         right_panel = QVBoxLayout()
@@ -136,10 +151,13 @@ class VideoGraphApp(QMainWindow):
         self.graph_layout = QVBoxLayout(scroll_widget)
 
         for i in range(10):
-            plot_widget = pg.PlotWidget()
+            time_axis = pg.AxisItem(orientation='bottom')
+            plot_widget = pg.PlotWidget(axisItems={'bottom': time_axis})
             plot_widget.setBackground("w")
             plot_widget.plot([], pen=pg.mkPen(color="b", width=2))
             plot_widget.setTitle(self.graph_titles[i])  # Set default title
+
+            plot_widget.showGrid(x=True, y=True)  # Turn on grid lines for x and y axes
 
             frame = QFrame()
             frame.setLayout(QVBoxLayout())
@@ -196,11 +214,31 @@ class VideoGraphApp(QMainWindow):
             self.graph_frames[i].setVisible(checkbox.isChecked())
 
     def update_graph(self, graph_index, new_data):
-        """Update the graph with new data."""
-        self.graph_widgets[graph_index].clear()
-        self.graph_widgets[graph_index].plot(new_data, pen=pg.mkPen(color="b", width=2))
+        """Update the graph with a rolling time window."""
+        window_size = 10  # 10 seconds total (t-5 to t+5)
+        sampling_rate = 10  # 30 points per second
+        total_window_points = window_size * sampling_rate
 
+        # Calculate rolling window indices
+        start_index = max(0, self.graph_thread.current_index - total_window_points // 2)
+        end_index = min(len(self.graph_thread.data[graph_index]), start_index + total_window_points)
 
+        # Get the rolling window data
+        rolling_data = self.graph_thread.data[graph_index][start_index:end_index]
+
+        # Generate corresponding time values for the rolling window
+        time_values = [i / sampling_rate for i in range(start_index, end_index)]
+
+        # Update the graph dynamically
+        plot_curve = self.graph_widgets[graph_index].listDataItems()[0]
+        plot_curve.setData(time_values, rolling_data)
+
+    def update_timer(self, position):
+        """Update the timer label with the current playback position."""
+        total_seconds = position // 1000  # Convert milliseconds to seconds
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        self.timer_label.setText(f"{minutes:02}:{seconds:02}")
 
 
 if __name__ == "__main__":
